@@ -128,3 +128,23 @@ pub fn decode(bytes: &[u8]) -> Result<Frame, FrameError> {
 
     Ok(Frame { id, origin, kind, payload })
 }
+
+pub fn try_decode(buffer: &mut Vec<u8>) -> Result<Option<Frame>, FrameError> {
+    if buffer.len() < HEADER_LEN {
+        return Ok(None);
+    }
+
+    let payload_len = u32::from_be_bytes(buffer[38..42].try_into().expect("fixed header slice")) as usize;
+    if payload_len > MAX_PAYLOAD_BYTES {
+        return Err(FrameError::PayloadTooLarge(payload_len));
+    }
+
+    let frame_len = HEADER_LEN + payload_len;
+    if buffer.len() < frame_len {
+        return Ok(None);
+    }
+
+    let frame = decode(&buffer[..frame_len])?;
+    buffer.drain(..frame_len);
+    Ok(Some(frame))
+}
