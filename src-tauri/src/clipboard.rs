@@ -88,6 +88,10 @@ impl<C: ClipboardWriter> ClipboardSync<C> {
         self.auto_write_remote_text = enabled;
     }
 
+    pub fn auto_write_remote_text(&self) -> bool {
+        self.auto_write_remote_text
+    }
+
     pub fn handle_remote_frame(&mut self, frame: &Frame) -> Result<SyncAction, ClipboardError> {
         match frame.kind() {
             MessageKind::Text => {

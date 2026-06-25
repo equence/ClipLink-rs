@@ -21,6 +21,10 @@ impl<C: ClipboardWriter> AppState<C> {
         self.clipboard_sync.set_auto_write_remote_text(enabled);
     }
 
+    pub fn auto_write_remote_text(&self) -> bool {
+        self.clipboard_sync.auto_write_remote_text()
+    }
+
     pub fn handle_connection_event(
         &mut self,
         event: ConnectionEvent,
@@ -38,6 +42,7 @@ impl<C: ClipboardWriter> AppState<C> {
 
     pub fn status(&self) -> AppStatus {
         AppStatus {
+            auto_write_remote_text: self.auto_write_remote_text(),
             last_remote_text: self.last_remote_text.clone(),
             cached_image_count: self.clipboard_sync.cached_images().len(),
         }
@@ -50,6 +55,7 @@ impl<C: ClipboardWriter> AppState<C> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppStatus {
+    pub auto_write_remote_text: bool,
     pub last_remote_text: Option<String>,
     pub cached_image_count: usize,
 }
