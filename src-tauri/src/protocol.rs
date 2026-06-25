@@ -46,12 +46,25 @@ impl Frame {
         }
     }
 
+    pub fn from_png(bytes: Vec<u8>) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            origin: Uuid::new_v4(),
+            kind: MessageKind::ImagePng,
+            payload: bytes,
+        }
+    }
+
     pub fn kind(&self) -> MessageKind {
         self.kind
     }
 
     pub fn id(&self) -> Uuid {
         self.id
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
     }
 
     pub fn text(&self) -> Result<&str, FrameError> {
