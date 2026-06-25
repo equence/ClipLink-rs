@@ -17,7 +17,9 @@ fn stream_decoder_waits_for_the_complete_frame() {
     let split_at = encoded.len() - 2;
     let mut buffer = encoded[..split_at].to_vec();
 
-    assert!(try_decode(&mut buffer).expect("partial input is valid").is_none());
+    assert!(try_decode(&mut buffer)
+        .expect("partial input is valid")
+        .is_none());
     assert_eq!(buffer.len(), split_at);
 
     buffer.extend_from_slice(&encoded[split_at..]);

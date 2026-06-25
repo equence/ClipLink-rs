@@ -50,6 +50,10 @@ impl Frame {
         self.kind
     }
 
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
     pub fn text(&self) -> Result<&str, FrameError> {
         if self.kind != MessageKind::Text {
             return Err(FrameError::NotText);
@@ -85,7 +89,8 @@ pub fn encode(frame: &Frame) -> Result<Vec<u8>, FrameError> {
         return Err(FrameError::PayloadTooLarge(frame.payload.len()));
     }
 
-    let payload_len = u32::try_from(frame.payload.len()).map_err(|_| FrameError::PayloadTooLarge(frame.payload.len()))?;
+    let payload_len = u32::try_from(frame.payload.len())
+        .map_err(|_| FrameError::PayloadTooLarge(frame.payload.len()))?;
     let mut bytes = Vec::with_capacity(HEADER_LEN + frame.payload.len());
     bytes.extend_from_slice(&MAGIC);
     bytes.push(VERSION);
@@ -112,7 +117,8 @@ pub fn decode(bytes: &[u8]) -> Result<Frame, FrameError> {
     let kind = MessageKind::try_from(bytes[5])?;
     let id = Uuid::from_slice(&bytes[6..22]).map_err(|_| FrameError::InvalidLength)?;
     let origin = Uuid::from_slice(&bytes[22..38]).map_err(|_| FrameError::InvalidLength)?;
-    let payload_len = u32::from_be_bytes(bytes[38..42].try_into().expect("fixed header slice")) as usize;
+    let payload_len =
+        u32::from_be_bytes(bytes[38..42].try_into().expect("fixed header slice")) as usize;
     if payload_len > MAX_PAYLOAD_BYTES {
         return Err(FrameError::PayloadTooLarge(payload_len));
     }
@@ -126,7 +132,12 @@ pub fn decode(bytes: &[u8]) -> Result<Frame, FrameError> {
         return Err(FrameError::HashMismatch);
     }
 
-    Ok(Frame { id, origin, kind, payload })
+    Ok(Frame {
+        id,
+        origin,
+        kind,
+        payload,
+    })
 }
 
 pub fn try_decode(buffer: &mut Vec<u8>) -> Result<Option<Frame>, FrameError> {
@@ -134,7 +145,8 @@ pub fn try_decode(buffer: &mut Vec<u8>) -> Result<Option<Frame>, FrameError> {
         return Ok(None);
     }
 
-    let payload_len = u32::from_be_bytes(buffer[38..42].try_into().expect("fixed header slice")) as usize;
+    let payload_len =
+        u32::from_be_bytes(buffer[38..42].try_into().expect("fixed header slice")) as usize;
     if payload_len > MAX_PAYLOAD_BYTES {
         return Err(FrameError::PayloadTooLarge(payload_len));
     }

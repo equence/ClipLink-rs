@@ -1,8 +1,19 @@
 use crate::protocol::{encode, try_decode};
-use std::{collections::HashMap, fmt, net::SocketAddr, sync::{atomic::{AtomicU64, Ordering}, Arc}};
+use std::{
+    collections::HashMap,
+    fmt,
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{tcp::{OwnedReadHalf, OwnedWriteHalf}, TcpListener},
+    net::{
+        tcp::{OwnedReadHalf, OwnedWriteHalf},
+        TcpListener,
+    },
     sync::Mutex,
     task::JoinHandle,
 };
@@ -22,7 +33,10 @@ impl Relay {
         let next_peer_id = Arc::new(AtomicU64::new(1));
         let accept_task = tokio::spawn(accept_connections(listener, peers, next_peer_id));
 
-        Ok(Self { local_addr, accept_task })
+        Ok(Self {
+            local_addr,
+            accept_task,
+        })
     }
 
     pub fn local_addr(&self) -> SocketAddr {
