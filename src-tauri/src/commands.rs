@@ -6,7 +6,12 @@ use crate::{
     relay::{Relay, RelayError},
 };
 use serde::Serialize;
-use std::{fmt, net::SocketAddr, time::Duration};
+use std::{
+    fmt,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -30,26 +35,37 @@ pub fn set_auto_write_remote_text<C: ClipboardWriter>(
 }
 
 pub struct CommandRuntime<C> {
-    app_state: AppState<C>,
+    app_state: Arc<Mutex<AppState<C>>>,
     connection: ConnectionManager,
     relay: Option<Relay>,
 }
 
-impl<C: ClipboardWriter> CommandRuntime<C> {
+impl<C: ClipboardWriter + Send + 'static> CommandRuntime<C> {
     pub fn new(clipboard: C, connection: ConnectionManager) -> Self {
         Self {
-            app_state: AppState::new(clipboard),
+            app_state: Arc::new(Mutex::new(AppState::new(clipboard))),
             connection,
             relay: None,
         }
     }
 
     pub fn status(&self) -> AppStatusDto {
-        app_status(&self.app_state)
+        app_status(
+            &self
+                .app_state
+                .lock()
+                .expect("app state lock is not poisoned"),
+        )
     }
 
     pub fn set_auto_write_remote_text(&mut self, enabled: bool) -> AppStatusDto {
-        set_auto_write_remote_text(&mut self.app_state, enabled)
+        set_auto_write_remote_text(
+            &mut self
+                .app_state
+                .lock()
+                .expect("app state lock is not poisoned"),
+            enabled,
+        )
     }
 
     pub async fn connect_relay(
@@ -58,9 +74,19 @@ impl<C: ClipboardWriter> CommandRuntime<C> {
         retry_attempts: usize,
         retry_delay: Duration,
     ) -> Result<AppStatusDto, CommandError> {
+        let mut events = self.connection.subscribe();
         self.connection
             .connect_with_retry(address, retry_attempts, retry_delay)
             .await?;
+        let app_state = Arc::clone(&self.app_state);
+        tokio::spawn(async move {
+            while let Ok(event) = events.recv().await {
+                let _ = app_state
+                    .lock()
+                    .expect("app state lock is not poisoned")
+                    .handle_connection_event(event);
+            }
+        });
         Ok(self.status())
     }
 
@@ -79,18 +105,27 @@ impl<C: ClipboardWriter> CommandRuntime<C> {
     pub fn handle_remote_frame(&mut self, frame: Frame) -> Result<SyncAction, CommandError> {
         let action = self
             .app_state
+            .lock()
+            .expect("app state lock is not poisoned")
             .handle_connection_event(ConnectionEvent::Frame(frame))?
             .ok_or(CommandError::FrameExpected)?;
         Ok(action)
     }
 
     pub fn copy_cached_image(&mut self, id: Uuid) -> Result<AppStatusDto, CommandError> {
-        self.app_state.copy_cached_image_to_clipboard(id)?;
+        self.app_state
+            .lock()
+            .expect("app state lock is not poisoned")
+            .copy_cached_image_to_clipboard(id)?;
         Ok(self.status())
     }
 
-    pub fn clipboard(&self) -> &C {
-        self.app_state.clipboard()
+    pub fn with_clipboard<R>(&self, read: impl FnOnce(&C) -> R) -> R {
+        let app_state = self
+            .app_state
+            .lock()
+            .expect("app state lock is not poisoned");
+        read(app_state.clipboard())
     }
 }
 

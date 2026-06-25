@@ -7,7 +7,11 @@ use cliplink_lib::{
     relay::Relay,
 };
 use std::{net::SocketAddr, time::Duration};
-use tokio::{io::AsyncReadExt, net::TcpStream, time::timeout};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    time::timeout,
+};
 
 #[derive(Default)]
 struct RecordingClipboard {
@@ -72,6 +76,49 @@ async fn runtime_connects_to_relay_and_sends_text() {
 }
 
 #[tokio::test]
+async fn runtime_applies_remote_frames_from_connection_events() {
+    let relay = Relay::start("127.0.0.1:0".parse().expect("valid address"))
+        .await
+        .expect("relay starts");
+    let mut sender = TcpStream::connect(relay.local_addr())
+        .await
+        .expect("sender connects");
+    let mut runtime = CommandRuntime::new(RecordingClipboard::default(), ConnectionManager::new());
+    runtime.set_auto_write_remote_text(true);
+
+    runtime
+        .connect_relay(relay.local_addr(), 3, Duration::from_millis(10))
+        .await
+        .expect("runtime connects");
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    sender
+        .write_all(
+            &cliplink_lib::protocol::encode(&Frame::from_text("remote update"))
+                .expect("frame encodes"),
+        )
+        .await
+        .expect("sender writes");
+
+    let status = timeout(Duration::from_secs(1), async {
+        loop {
+            let status = runtime.status();
+            if status.last_remote_text.as_deref() == Some("remote update") {
+                break status;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("runtime applies remote frame");
+
+    assert_eq!(status.last_remote_text.as_deref(), Some("remote update"));
+    assert_eq!(
+        runtime.with_clipboard(|clipboard| clipboard.texts.clone()),
+        ["remote update"]
+    );
+}
+
+#[tokio::test]
 async fn runtime_starts_embedded_relay_for_peers() {
     let mut runtime = CommandRuntime::new(RecordingClipboard::default(), ConnectionManager::new());
 
@@ -98,5 +145,8 @@ fn runtime_copies_cached_image_to_clipboard() {
     let status = runtime.copy_cached_image(id).expect("cached image copied");
 
     assert_eq!(status.cached_image_count, 1);
-    assert_eq!(runtime.clipboard().pngs, [vec![1, 2, 3]]);
+    assert_eq!(
+        runtime.with_clipboard(|clipboard| clipboard.pngs.clone()),
+        [vec![1, 2, 3]]
+    );
 }
