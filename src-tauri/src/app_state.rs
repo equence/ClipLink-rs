@@ -51,6 +51,10 @@ impl<C: ClipboardWriter> AppState<C> {
     pub fn clipboard(&self) -> &C {
         self.clipboard_sync.clipboard()
     }
+
+    pub fn copy_cached_image_to_clipboard(&mut self, id: uuid::Uuid) -> Result<(), ClipboardError> {
+        self.clipboard_sync.copy_cached_image_to_clipboard(id)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
