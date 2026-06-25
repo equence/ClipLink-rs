@@ -1,10 +1,59 @@
 use crate::protocol::{Frame, FrameError, MessageKind};
-use std::fmt;
+use arboard::ImageData;
+use std::{borrow::Cow, fmt};
 use uuid::Uuid;
 
 pub trait ClipboardWriter {
     fn write_text(&mut self, text: &str) -> Result<(), ClipboardError>;
     fn write_png(&mut self, png: &[u8]) -> Result<(), ClipboardError>;
+}
+
+pub struct NativeClipboard {
+    clipboard: arboard::Clipboard,
+}
+
+impl NativeClipboard {
+    pub fn new() -> Result<Self, ClipboardError> {
+        let clipboard =
+            arboard::Clipboard::new().map_err(|error| ClipboardError::Native(error.to_string()))?;
+        Ok(Self { clipboard })
+    }
+}
+
+impl ClipboardWriter for NativeClipboard {
+    fn write_text(&mut self, text: &str) -> Result<(), ClipboardError> {
+        self.clipboard
+            .set_text(text.to_owned())
+            .map_err(|error| ClipboardError::Native(error.to_string()))
+    }
+
+    fn write_png(&mut self, png: &[u8]) -> Result<(), ClipboardError> {
+        let image = decode_png_for_clipboard(png)?;
+        self.clipboard
+            .set_image(ImageData {
+                width: image.width,
+                height: image.height,
+                bytes: Cow::Owned(image.rgba),
+            })
+            .map_err(|error| ClipboardError::Native(error.to_string()))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClipboardImage {
+    pub width: usize,
+    pub height: usize,
+    pub rgba: Vec<u8>,
+}
+
+pub fn decode_png_for_clipboard(png: &[u8]) -> Result<ClipboardImage, ClipboardError> {
+    let image = image::load_from_memory_with_format(png, image::ImageFormat::Png)?.to_rgba8();
+    let (width, height) = image.dimensions();
+    Ok(ClipboardImage {
+        width: width as usize,
+        height: height as usize,
+        rgba: image.into_raw(),
+    })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -82,13 +131,21 @@ impl<C: ClipboardWriter> ClipboardSync<C> {
 #[derive(Debug)]
 pub enum ClipboardError {
     Frame(FrameError),
+    Image(image::ImageError),
     MissingImage(Uuid),
+    Native(String),
     UnsupportedFrame(MessageKind),
 }
 
 impl From<FrameError> for ClipboardError {
     fn from(error: FrameError) -> Self {
         Self::Frame(error)
+    }
+}
+
+impl From<image::ImageError> for ClipboardError {
+    fn from(error: image::ImageError) -> Self {
+        Self::Image(error)
     }
 }
 

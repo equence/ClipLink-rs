@@ -1,7 +1,11 @@
 use cliplink_lib::{
-    clipboard::{ClipboardError, ClipboardSync, ClipboardWriter, SyncAction},
+    clipboard::{
+        decode_png_for_clipboard, ClipboardError, ClipboardSync, ClipboardWriter, NativeClipboard,
+        SyncAction,
+    },
     protocol::Frame,
 };
+use std::io::Cursor;
 
 #[derive(Default)]
 struct RecordingClipboard {
@@ -67,4 +71,26 @@ fn remote_png_is_cached_and_only_copied_on_request() {
         .expect("cached image can be copied");
 
     assert_eq!(sync.clipboard().pngs, [png]);
+}
+
+#[test]
+fn png_bytes_decode_to_rgba_clipboard_image() {
+    let mut png = Cursor::new(Vec::new());
+    let image = image::RgbaImage::from_pixel(1, 1, image::Rgba([1, 2, 3, 4]));
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut png, image::ImageFormat::Png)
+        .expect("test png encodes");
+
+    let decoded = decode_png_for_clipboard(&png.into_inner()).expect("png decodes");
+
+    assert_eq!(decoded.width, 1);
+    assert_eq!(decoded.height, 1);
+    assert_eq!(decoded.rgba, vec![1, 2, 3, 4]);
+}
+
+#[test]
+fn native_clipboard_implements_clipboard_writer() {
+    fn assert_writer<T: ClipboardWriter>() {}
+
+    assert_writer::<NativeClipboard>();
 }
